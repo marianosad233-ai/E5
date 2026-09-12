@@ -16,6 +16,18 @@ import { LeaderCard } from "./LeaderCard"
 import { PokemonCard } from "./PokemonCard"
 import { PokemonDetails } from "./PokemonDetails"
 import { SiteFooter } from "./SiteFooter"
+import { QuickNavBar } from "./QuickNavBar"
+import StrategyGuide from "./StrategyGuide"
+import sixPillars from "../data/strategies/gym-rerun/6pillars_basic.json"
+import sevenHells from "../data/strategies/gym-rerun/lucky_girl.json"
+import jinxedBoon from "../data/strategies/red-battle/red.json"
+import colored from "../data/strategies/red-battle/red_colored.json"
+import type { StrategyData } from "./StrategyGuide"
+import {
+  type StrategyId,
+  type GymRerunStrategyId,
+  type RedBattleStrategyId,
+} from "../config/strategies"
 
 function countBranches(tricks: Tricks[] = []): number {
   return tricks.reduce((total, t) => total + 1 + countBranches(t.variant), 0)
@@ -29,8 +41,14 @@ export default function PokemonGuide() {
   const [regions, setRegions] = useState<Region[]>([])
   const [regionsLoaded, setRegionsLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [activeStrategy, setActiveStrategy] = useState<StrategyId>("dingxianyou")
+  const [activeGymRerunStrategy, setActiveGymRerunStrategy] = useState<GymRerunStrategyId>("six-pillars")
+  const [activeRedBattleStrategy, setActiveRedBattleStrategy] = useState<RedBattleStrategyId>("jinxedboon")
+  const [activeSection, setActiveSection] = useState<"e4" | "gym" | "red">("e4")
 
   const detailsRef = useRef<HTMLDivElement>(null)
+  const regionSectionRef = useRef<HTMLDivElement>(null)
+  const leaderSectionRef = useRef<HTMLDivElement>(null)
 
   const { getPokemonFiles } = useDynamicImports()
 
@@ -153,6 +171,42 @@ export default function PokemonGuide() {
   const currentLeader = currentRegion?.leaders.find((l) => l.id === expandedLeader)
   const currentLeaderPokemons = currentLeader?.pokemons || []
 
+  const handleGoToRegions = () => {
+    setExpandedRegion(null)
+    setExpandedLeader(null)
+    setSelectedPokemon(null)
+    requestAnimationFrame(() => {
+      regionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
+  }
+
+  const handleGoToLeaders = () => {
+    setExpandedLeader(null)
+    setSelectedPokemon(null)
+    requestAnimationFrame(() => {
+      leaderSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
+  }
+
+  const handleNextLeader = () => {
+    if (!currentRegion) return
+    const leaderIdx = currentRegion.leaders.findIndex((l) => l.id === expandedLeader)
+    const hasNextInRegion = leaderIdx !== -1 && leaderIdx < currentRegion.leaders.length - 1
+
+    if (hasNextInRegion) {
+      setExpandedLeader(currentRegion.leaders[leaderIdx + 1].id)
+    } else {
+      const regionIdx = regions.findIndex((r) => r.id === currentRegion.id)
+      const nextRegion = regions[(regionIdx + 1) % regions.length]
+      setExpandedRegion(nextRegion.id)
+      setExpandedLeader(nextRegion.leaders[0]?.id ?? null)
+    }
+    setSelectedPokemon(null)
+    requestAnimationFrame(() => {
+      leaderSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
+  }
+
   const stats = useMemo(() => {
     let leaders = 0
     let pokemons = 0
@@ -170,12 +224,31 @@ export default function PokemonGuide() {
     return { regions: regions.length, leaders, pokemons, branches }
   }, [regions])
 
+  const selectedGymStrategy = (activeGymRerunStrategy === "six-pillars" ? sixPillars : sevenHells) as unknown as StrategyData
+  const selectedRedStrategy = (activeRedBattleStrategy === "jinxedboon" ? jinxedBoon : colored) as unknown as StrategyData
+  const isE4 = activeStrategy === "dingxianyou" || activeStrategy === "dingxianyou-2"
+
   return (
     <div className="min-h-screen bg-transparent text-mist-100">
-      <SiteHeader />
-      <HeroSection stats={stats} />
+      <SiteHeader
+        activeStrategy={activeStrategy}
+        onStrategyChange={(strategy) => {
+          setActiveSection("e4")
+          setActiveStrategy(strategy)
+          setExpandedRegion(null)
+          setExpandedLeader(null)
+          setSelectedPokemon(null)
+        }}
+        activeGymRerunStrategy={activeGymRerunStrategy}
+        onGymRerunStrategyChange={(strategy) => { setActiveSection("gym"); setActiveGymRerunStrategy(strategy) }}
+        activeRedBattleStrategy={activeRedBattleStrategy}
+        onRedBattleStrategyChange={(strategy) => { setActiveSection("red"); setActiveRedBattleStrategy(strategy) }}
+      />
 
-      <main id="guia" className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
+      {activeSection === "e4" && isE4 ? (
+        <>
+          <HeroSection stats={stats} activeStrategy={activeStrategy} />
+          <main id="guia" className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
         {/* Tips */}
         <div className="mb-8 rounded-2xl border border-ink-700 bg-ink-900/60 p-4">
           <button
@@ -231,11 +304,11 @@ export default function PokemonGuide() {
         )}
 
         {/* Regions */}
-        <div>
+        <div ref={regionSectionRef} className="scroll-mt-20">
           <p className="mb-3 text-xs font-medium uppercase tracking-wide text-mist-500">
             1. Elige región
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
             {regions.map((region, i) => (
               <RegionCard
                 key={region.id}
@@ -250,11 +323,11 @@ export default function PokemonGuide() {
 
         {/* Leaders */}
         {expandedRegion && currentRegion && (
-          <div className="mt-6 animate-in">
+          <div ref={leaderSectionRef} className="mt-6 scroll-mt-20 animate-in">
             <p className="mb-3 text-xs font-medium uppercase tracking-wide text-mist-500">
               2. Elige entrenador
             </p>
-            <div className="flex flex-wrap gap-3">
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
               {currentRegion.leaders.map((leader) => (
                 <LeaderCard
                   key={leader.id}
@@ -273,7 +346,7 @@ export default function PokemonGuide() {
             <p className="mb-3 text-xs font-medium uppercase tracking-wide text-mist-500">
               3. Elige el Pokémon rival
             </p>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-2.5">
               {currentLeaderPokemons.map((pokemon) => (
                 <PokemonCard
                   key={pokemon.id}
@@ -292,7 +365,25 @@ export default function PokemonGuide() {
             <PokemonDetails pokemon={selectedPokemon} />
           </div>
         )}
-      </main>
+          </main>
+          {expandedRegion && (
+            <QuickNavBar
+              hasLeader={!!expandedLeader}
+              onGoToRegions={handleGoToRegions}
+              onGoToLeaders={handleGoToLeaders}
+              onNextLeader={handleNextLeader}
+            />
+          )}
+        </>
+      ) : activeSection === "gym" ? (
+        <main id="guia" className="pt-8">
+          <StrategyGuide key={selectedGymStrategy.id} strategy={selectedGymStrategy} category="Gym Rerun" />
+        </main>
+      ) : (
+        <main id="guia" className="pt-8">
+          <StrategyGuide key={selectedRedStrategy.id} strategy={selectedRedStrategy} category="Red Battle" />
+        </main>
+      )}
 
       <SiteFooter />
     </div>
